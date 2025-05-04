@@ -1,63 +1,44 @@
-# Dependency Review Action
-#
-# This Action will scan dependency manifest files that change as part of a Pull Request,
-# surfacing known-vulnerable versions of the packages declared or updated in the PR.
-# Once installed, if the workflow run is marked as required, PRs introducing known-vulnerable
-# packages will be blocked from merging.
-#
-# Source repository: https://github.com/actions/dependency-review-action
-# Public documentation: https://docs.github.com/en/code-security/supply-chain-security/understanding-your-software-supply-chain/about-dependency-review#dependency-review-enforcement
+name: Dependency Audit
 on:
-  pull_request:
-    branches: [ $default-branch, $protected-branches ]
-  # Add workflow_dispatch to enable manual triggering
-  workflow_dispatch:
-    inputs:
-      base-ref:
-        description: 'Base branch/tag to compare against (e.g., main)'
-        required: true
-        default: 'main'
-      head-ref:
-        description: 'Head branch/tag to analyze (e.g., feature-branch)'
-        required: true
-        default: 'HEAD'
-
-permissions:
-  contents: read
-  pull-requests: write
+  schedule:
+    - cron: '30 9 * * 0'  # Run weekly on Mondays
+  workflow_dispatch:  # Allow manual triggering
 
 jobs:
-  dependency-review:
+  audit:
     runs-on: ubuntu-latest
     steps:
-      - name: 'Checkout repository'
-        uses: actions/checkout@v4
-        with:
-          # When manually triggered, use the provided refs
-          fetch-depth: 0
+      - uses: actions/checkout@v4
 
-      # Set dynamic refs based on event type
-      - name: 'Set comparison refs'
-        id: set-refs
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install depcheck
+        run: npm install -g depcheck
+
+      - name: Run depcheck for unused dependencies
+        run: depcheck --json > unused-deps.json
+
+      - name: Run npm audit
+        run: npm audit --json > security-audit.json
+
+      - name: Generate report
         run: |
-          if [[ \"${{ github.event_name }}\" == \"workflow_dispatch\" ]]; then
-            echo \"base_ref=${{ github.event.inputs.base-ref }}\" >> $GITHUB_OUTPUT
-            echo \"head_ref=${{ github.event.inputs.head-ref }}\" >> $GITHUB_OUTPUT
-            echo \"Running manual dependency review comparing ${{ github.event.inputs.base-ref }} to ${{ github.event.inputs.head-ref }}\"
-          else
-            echo \"base_ref=${{ github.event.pull_request.base.sha }}\" >> $GITHUB_OUTPUT
-            echo \"head_ref=${{ github.event.pull_request.head.sha }}\" >> $GITHUB_OUTPUT
-            echo \"Running dependency review on PR #${{ github.event.pull_request.number }}\"
-          fi
+          echo "# Dependency Audit Report $(date)" > report.md
+          echo "## Unused Dependencies" >> report.md
+          cat unused-deps.json | jq -r '.dependencies[]' >> report.md
+          echo "## Security Issues" >> report.md
+          cat security-audit.json | jq '.metadata.vulnerabilities' >> report.md
 
-      - name: 'Dependency Review'
-        uses: actions/dependency-review-action@v4
+      - name: Create issue if problems found
+        uses: peter-evans/create-issue-from-file@v4
+        if: ${{ success() }}
         with:
-          comment-summary-in-pr: always
-          base-ref: ${{ steps.set-refs.outputs.base_ref }}
-          head-ref: ${{ steps.set-refs.outputs.head_ref }}
-          
-          # Additional options (commented out)
-          # fail-on-severity: moderate
-          # deny-licenses: GPL-1.0-or-later, LGPL-2.0-or-later
-          # retry-on-snapshot-warnings: true
+          title: Weekly Dependency Audit
+          content-filepath: ./report.md
+          labels: maintenance, dependencies
