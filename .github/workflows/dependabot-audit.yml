@@ -1,44 +1,97 @@
-name: Dependency Audit
+name: 'Simple Dependency Audit'
+
 on:
+  # Run every Sunday at 3:00 PM IST (9:30 AM UTC)
   schedule:
-    - cron: '30 9 * * 0'  # Run weekly on Mondays
-  workflow_dispatch:  # Allow manual triggering
+    - cron: '30 9 * * 0'
+  # Allow manual triggering
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
 
 jobs:
   audit:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '18'
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Install depcheck
-        run: npm install -g depcheck
-
-      - name: Run depcheck for unused dependencies
-        run: depcheck --json > unused-deps.json
-
-      - name: Run npm audit
-        run: npm audit --json > security-audit.json
-
-      - name: Generate report
+      # Check for Node.js dependencies
+      - name: Audit NPM dependencies
+        if: hashFiles('package.json') != ''
         run: |
-          echo "# Dependency Audit Report $(date)" > report.md
-          echo "## Unused Dependencies" >> report.md
-          cat unused-deps.json | jq -r '.dependencies[]' >> report.md
-          echo "## Security Issues" >> report.md
-          cat security-audit.json | jq '.metadata.vulnerabilities' >> report.md
+          echo "# Dependency Audit Report" > audit_report.md
+          echo "Generated on $(date)" >> audit_report.md
+          echo "" >> audit_report.md
+          
+          echo "## NPM Dependencies" >> audit_report.md
+          echo "### Security Vulnerabilities" >> audit_report.md
+          echo '```' >> audit_report.md
+          npm audit || echo "No vulnerabilities found or audit failed"
+          npm audit --json | jq -c . > npm_audit.json
+          if [ -s npm_audit.json ]; then
+            echo "Found vulnerabilities - see details below:" >> audit_report.md
+            jq '.vulnerabilities | length' npm_audit.json | xargs -I{} echo "Total vulnerabilities: {}" >> audit_report.md
+          else
+            echo "No vulnerabilities found" >> audit_report.md
+          fi
+          echo '```' >> audit_report.md
+          
+          echo "" >> audit_report.md
+          echo "### Outdated Packages" >> audit_report.md
+          echo '```' >> audit_report.md
+          npm outdated || echo "No outdated packages or check failed"
+          echo '```' >> audit_report.md
 
-      - name: Create issue if problems found
-        uses: peter-evans/create-issue-from-file@v4
-        if: ${{ success() }}
+      # Check for Python dependencies
+      - name: Audit Python dependencies
+        if: hashFiles('requirements.txt') != '' || hashFiles('pyproject.toml') != ''
+        run: |
+          # Install safety
+          pip install safety
+          
+          if [ ! -f audit_report.md ]; then
+            echo "# Dependency Audit Report" > audit_report.md
+            echo "Generated on $(date)" >> audit_report.md
+            echo "" >> audit_report.md
+          fi
+          
+          echo "## Python Dependencies" >> audit_report.md
+          echo "### Security Vulnerabilities" >> audit_report.md
+          echo '```' >> audit_report.md
+          safety check || echo "No vulnerabilities found or check failed"
+          echo '```' >> audit_report.md
+          
+          echo "" >> audit_report.md
+          echo "### Outdated Packages" >> audit_report.md
+          echo '```' >> audit_report.md
+          pip list --outdated || echo "No outdated packages or check failed"
+          echo '```' >> audit_report.md
+
+      # Create issue with findings
+      - name: Create GitHub issue
+        if: success() || failure()
+        uses: actions/github-script@v6
         with:
-          title: Weekly Dependency Audit
-          content-filepath: ./report.md
-          labels: maintenance, dependencies
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            let reportContent = '';
+            
+            try {
+              reportContent = fs.readFileSync('audit_report.md', 'utf8');
+            } catch (error) {
+              reportContent = '# Dependency Audit Report\n\nNo dependencies found to audit or all checks failed.';
+            }
+            
+            const today = new Date().toISOString().split('T')[0];
+            
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `Dependency Audit Report - ${today}`,
+              body: reportContent + '\n\n## Next steps\nReview vulnerabilities and update dependencies as needed.',
+              labels: ['dependencies']
+            });
