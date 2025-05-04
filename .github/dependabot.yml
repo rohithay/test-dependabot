@@ -9,6 +9,6 @@ updates:
     directory: "/"
     schedule:
       interval: "daily"
-      time: "07:00" # This is UTC time (12:30 IST is approximately 07:00 UTC)
+      time: "08:10"
       timezone: "Asia/Kolkata" # Setting to Indian timezone
     open-pull-requests-limit: 10
