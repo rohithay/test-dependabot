@@ -1,110 +1,39 @@
-name: Dependabot Auto Review
-
+# Dependency Review Action
+#
+# This Action will scan dependency manifest files that change as part of a Pull Request,
+# surfacing known-vulnerable versions of the packages declared or updated in the PR.
+# Once installed, if the workflow run is marked as required, PRs introducing known-vulnerable
+# packages will be blocked from merging.
+#
+# Source repository: https://github.com/actions/dependency-review-action
+# Public documentation: https://docs.github.com/en/code-security/supply-chain-security/understanding-your-software-supply-chain/about-dependency-review#dependency-review-enforcement
+name: 'Dependency review'
 on:
   pull_request:
-    branches: [ main, master, env/dev ]
+    branches: [ $default-branch, $protected-branches ]
 
+# If using a dependency submission action in this workflow this permission will need to be set to:
+#
+# permissions:
+#   contents: write
+#
+# https://docs.github.com/en/enterprise-cloud@latest/code-security/supply-chain-security/understanding-your-software-supply-chain/using-the-dependency-submission-api
 permissions:
   contents: read
+  # Write permissions for pull-requests are required for using the `comment-summary-in-pr` option, comment out if you aren't using this option
   pull-requests: write
 
 jobs:
-  dependabot:
+  dependency-review:
     runs-on: ubuntu-latest
-    if: ${{ github.actor == 'dependabot[bot]' }}
     steps:
-      - name: Checkout repository
+      - name: 'Checkout repository'
         uses: actions/checkout@v4
-
-      - name: Dependency Review
-        uses: actions/dependency-review-action@v3
+      - name: 'Dependency Review'
+        uses: actions/dependency-review-action@v4
+        # Commonly enabled options, see https://github.com/actions/dependency-review-action#configuration-options for all available options.
         with:
-          fail-on-severity: high
-          deny-licenses: AGPL-1.0-or-later, LGPL-2.0-or-later
-
-      - name: Report vulnerabilities
-        id: vulnerability-report
-        run: |
-          echo "## Dependency Update Security Review" > $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "✅ No high severity vulnerabilities found in this update" >> $GITHUB_STEP_SUMMARY
-          echo "Security review completed successfully for PR #${{ github.event.pull_request.number }}" >> $GITHUB_STEP_SUMMARY
-
-      # Install dependencies based on detected language for testing
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        if: ${{ contains(github.event.pull_request.title, 'bump python') || contains(github.event.pull_request.title, 'bump pip') || contains(github.event.pull_request.title, '[pip]') }}
-        with:
-          python-version: '3.10'
-          
-      - name: Install Python dependencies and test
-        if: ${{ contains(github.event.pull_request.title, 'bump python') || contains(github.event.pull_request.title, 'bump pip') || contains(github.event.pull_request.title, '[pip]') }}
-        run: |
-          if [ -f requirements.txt ]; then
-            pip install -r requirements.txt
-            python -m pytest -xvs tests/ || echo "Tests failed but continuing"
-          elif [ -f pyproject.toml ]; then
-            pip install -e .
-            python -m pytest -xvs tests/ || echo "Tests failed but continuing"
-          fi
-          
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        if: ${{ contains(github.event.pull_request.title, 'bump npm') || contains(github.event.pull_request.title, 'bump node') || contains(github.event.pull_request.title, '[npm]') }}
-        with:
-          node-version: '18'
-          
-      - name: Install Node.js dependencies and test
-        if: ${{ contains(github.event.pull_request.title, 'bump npm') || contains(github.event.pull_request.title, 'bump node') || contains(github.event.pull_request.title, '[npm]') }}
-        run: |
-          if [ -f package.json ]; then
-            npm ci
-            npm test || echo "Tests failed but continuing"
-          fi
-        
-      # Run Docker tests
-      - name: Set up Docker
-        if: ${{ contains(github.event.pull_request.title, 'bump docker') || contains(github.event.pull_request.title, '[docker]') }}
-        uses: docker/setup-buildx-action@v3
-          
-      - name: Test Docker build
-        if: ${{ contains(github.event.pull_request.title, 'bump docker') || contains(github.event.pull_request.title, '[docker]') }}
-        run: |
-          if [ -f Dockerfile ]; then
-            docker build -t test-image . || echo "Docker build failed but continuing"
-          fi
-        
-      # Run Terraform validation
-      - name: Set up Terraform
-        if: ${{ contains(github.event.pull_request.title, 'bump terraform') || contains(github.event.pull_request.title, '[terraform]') }}
-        uses: hashicorp/setup-terraform@v3
-          
-      - name: Validate Terraform files
-        if: ${{ contains(github.event.pull_request.title, 'bump terraform') || contains(github.event.pull_request.title, '[terraform]') }}
-        run: |
-          if [ -d infrastructure ]; then
-            find infrastructure -name "*.tf" -exec dirname {} \; | sort -u | while read dir; do
-              cd "$dir"
-              terraform init -backend=false
-              terraform validate
-              cd - > /dev/null
-            done || echo "Terraform validation failed but continuing"
-          fi
-          
-      # Auto-approve PR if all checks pass
-      - name: Auto-approve PR
-        uses: hmarr/auto-approve-action@v3
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          
-      - name: Add comment to PR
-        uses: peter-evans/create-or-update-comment@v3
-        with:
-          issue-number: ${{ github.event.pull_request.number }}
-          body: |
-            ### Dependency Update Automatically Approved
-            
-            ✅ Security review passed
-            ✅ Dependency compatibility tested
-            
-            *This automated approval was triggered by the dependabot-auto-review workflow.*
+          comment-summary-in-pr: always
+        #   fail-on-severity: moderate
+        #   deny-licenses: GPL-1.0-or-later, LGPL-2.0-or-later
+        #   retry-on-snapshot-warnings: true
