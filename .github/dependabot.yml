@@ -5,7 +5,10 @@
 
 version: 2
 updates:
-  - package-ecosystem: "" # See documentation for possible values
-    directory: "/" # Location of package manifests
+  - package-ecosystem: ""
+    directory: "/"
     schedule:
-      interval: "weekly"
+      interval: "daily"
+      time: "07:00" # This is UTC time (12:30 IST is approximately 07:00 UTC)
+      timezone: "Asia/Kolkata" # Setting to Indian timezone
+    open-pull-requests-limit: 10
