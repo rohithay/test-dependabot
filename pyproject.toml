@@ -11,7 +11,7 @@ python = ">=3.12,<3.13"
 
 # Data processing & analytics
 pandas = "^2.2.3"
-pydantic = "2.11.2"
+pydantic = "2.11.5"
 orderly-set = "5.3.0"
 
 # Google Cloud dependencies
