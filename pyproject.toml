@@ -23,7 +23,7 @@ google-api-python-client = "^2.159.0"
 oauth2client = "^4.1.3"
 
 # Data transformation
-dbt-core = "1.8.8"
+dbt-core = "1.10.10"
 dbt-bigquery = "^1.9.1"
 
 # ML Pipeline
