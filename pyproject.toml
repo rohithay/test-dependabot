@@ -62,7 +62,7 @@ optional = true
 [tool.poetry.group.docs.dependencies]
 mkdocs = "^1.5.3"
 mkdocs-material = "^9.4.6"
-mkdocstrings = "^0.29.1"
+mkdocstrings = "^1.0.0"
 mkdocstrings-python = "^1.9.1"
 
 [tool.poetry.scripts]
