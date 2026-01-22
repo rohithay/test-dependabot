@@ -10,7 +10,7 @@ urls = { Source = "https://github.com/Q-Retail/fa_ranging" }
 python = ">=3.12,<3.13"
 
 # Data processing & analytics
-pandas = "^2.2.3"
+pandas = "^3.0.0"
 pydantic = "2.11.2"
 orderly-set = "5.3.0"
 
